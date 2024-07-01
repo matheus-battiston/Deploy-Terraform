@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
