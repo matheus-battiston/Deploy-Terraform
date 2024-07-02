@@ -2,20 +2,25 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Cria um par de chaves SSH usando uma chave pública existente
+variable "db_username" {
+  type = string
+}
+
+variable "db_password" {
+  type = string
+}
+
 resource "aws_key_pair" "deployer-key" {
   key_name   = "my-existing-key"
   public_key = file("keysaws.pub")
 }
 
-# Cria uma VPC
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
 }
 
-# Cria sub-redes em diferentes zonas de disponibilidade
 resource "aws_subnet" "subnet_a" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
@@ -28,12 +33,10 @@ resource "aws_subnet" "subnet_b" {
   availability_zone = "us-east-1b"
 }
 
-# Cria um Internet Gateway
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 }
 
-# Cria uma Tabela de Rotas
 resource "aws_route_table" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -43,7 +46,6 @@ resource "aws_route_table" "main" {
   }
 }
 
-# Associa a Tabela de Rotas às Sub-redes
 resource "aws_route_table_association" "a" {
   subnet_id      = aws_subnet.subnet_a.id
   route_table_id = aws_route_table.main.id
@@ -54,7 +56,6 @@ resource "aws_route_table_association" "b" {
   route_table_id = aws_route_table.main.id
 }
 
-# Cria um grupo de segurança para a instância EC2
 resource "aws_security_group" "allow_ssh" {
   vpc_id = aws_vpc.main.id
 
@@ -79,7 +80,6 @@ resource "aws_security_group" "allow_ssh" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-
   ingress {
     from_port   = 8080
     to_port     = 8080
@@ -94,7 +94,6 @@ resource "aws_security_group" "allow_ssh" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -103,7 +102,6 @@ resource "aws_security_group" "allow_ssh" {
   }
 }
 
-# Cria um grupo de segurança para o RDS
 resource "aws_security_group" "allow_postgres" {
   vpc_id = aws_vpc.main.id
 
@@ -122,22 +120,30 @@ resource "aws_security_group" "allow_postgres" {
   }
 }
 
-# Cria uma instância EC2
 resource "aws_instance" "example" {
-  ami           = "ami-007855ac798b5175e" # Ubuntu 22.04 LTS
-  instance_type   = "t2.micro"
-  key_name        = aws_key_pair.deployer-key.key_name
-  subnet_id       = aws_subnet.subnet_a.id
-  vpc_security_group_ids = [aws_security_group.allow_ssh.id, aws_security_group.allow_postgres.id]
+  ami                         = "ami-007855ac798b5175e" # Ubuntu 22.04 LTS
+  instance_type               = "t2.micro"
+  key_name                    = aws_key_pair.deployer-key.key_name
+  subnet_id                   = aws_subnet.subnet_a.id
+  vpc_security_group_ids      = [aws_security_group.allow_ssh.id, aws_security_group.allow_postgres.id]
   associate_public_ip_address = true
 
   iam_instance_profile = "LabInstanceProfile"
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo docker pull matheusbattiston/account:latest
+              docker run -d --name myapp -p 8080:8080 -e DATABASE_URL=jdbc:postgresql://${aws_db_instance.postgres.address}:5432/postgres matheusbattiston/account
+              EOF
+
   tags = {
     Name = "ExampleInstance"
+    CodeDeploy = "ExampleApp" # Adiciona a tag CodeDeploy para associar ao grupo de implementação
   }
 }
 
-# Cria um grupo de sub-redes para o RDS
 resource "aws_db_subnet_group" "main" {
   name       = "my-db-subnet-group"
   subnet_ids = [aws_subnet.subnet_a.id, aws_subnet.subnet_b.id]
@@ -147,19 +153,52 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
-# Cria uma instância RDS PostgreSQL
 resource "aws_db_instance" "postgres" {
   identifier              = "postgres-db"
   allocated_storage       = 10
   engine                  = "postgres"
   engine_version          = "14"
   instance_class          = "db.t3.micro"
-  username                = "postgres"
-  password                = "postgres"
+  username                = var.db_username
+  password                = var.db_password
   db_subnet_group_name    = aws_db_subnet_group.main.id
   vpc_security_group_ids  = [aws_security_group.allow_postgres.id]
   skip_final_snapshot     = true
   publicly_accessible     = true
+}
+
+resource "aws_codedeploy_app" "example" {
+  name = "ExampleApp"
+  compute_platform = "Server"
+}
+
+resource "aws_codedeploy_deployment_group" "example" {
+  app_name              = aws_codedeploy_app.example.name
+  deployment_group_name = "ExampleDeploymentGroup"
+  service_role_arn      = "arn:aws:iam::058264117992:role/LabRole"
+  deployment_style {
+    deployment_type = "IN_PLACE"
+    deployment_option = "WITHOUT_TRAFFIC_CONTROL"
+  }
+  ec2_tag_set {
+    ec2_tag_filter {
+      key   = "CodeDeploy"
+      value = "ExampleApp"
+      type  = "KEY_AND_VALUE"
+    }
+  }
+}
+
+resource "null_resource" "db_setup" {
+  depends_on = [aws_db_instance.postgres]
+
+  provisioner "local-exec" {
+    command = "psql -h ${aws_db_instance.postgres.address} -p 5432 -U ${var.db_username} -d postgres -f init.sql"
+
+    environment = {
+      PGPASSWORD = var.db_password
+    }
+  }
 }
 
 output "ec2_public_ip" {
