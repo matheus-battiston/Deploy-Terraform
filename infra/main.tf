@@ -168,13 +168,13 @@ resource "aws_db_instance" "postgres" {
 }
 
 resource "aws_codedeploy_app" "example" {
-  name = "ExampleApp"
+  name = "AccountCodeDeploy"
   compute_platform = "Server"
 }
 
 resource "aws_codedeploy_deployment_group" "example" {
   app_name              = aws_codedeploy_app.example.name
-  deployment_group_name = "ExampleDeploymentGroup"
+  deployment_group_name = "AccountDeploymentGroup"
   service_role_arn      = "arn:aws:iam::058264117992:role/LabRole"
   deployment_style {
     deployment_type = "IN_PLACE"
