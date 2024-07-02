@@ -21,7 +21,7 @@ public class AccountController {
 
     @GetMapping("/testdeploy")
     public String testDeploy() {
-        return "Deploy funcionou";
+        return "Deploy funcionou com o terrafor";
     }
     @GetMapping("/preferences")
     public ResponseEntity<?> getAccount(@RequestParam("id") Integer id){
