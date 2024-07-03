@@ -134,6 +134,8 @@ resource "aws_instance" "example" {
               #!/bin/bash
               sudo apt update
               sudo apt install -y docker.io
+              echo "export DATABASE_URL=jdbc:postgresql://${aws_db_instance.postgres.address}:5432/postgres" >> /etc/profile
+              source /etc/profile
               sudo apt-get update
               sudo apt-get install ruby-full ruby-webrick wget -y
               cd /tmp
