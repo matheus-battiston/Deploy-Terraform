@@ -182,10 +182,13 @@ resource "aws_codedeploy_app" "example" {
   compute_platform = "Server"
 }
 
+# Obtém dinamicamente o ID da conta AWS
+data "aws_caller_identity" "current" {}
+
 resource "aws_codedeploy_deployment_group" "example" {
   app_name              = aws_codedeploy_app.example.name
   deployment_group_name = "AccountDeploymentGroup"
-  service_role_arn      = "arn:aws:iam::058264117992:role/LabRole"
+  service_role_arn      = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/LabRole"
   deployment_style {
     deployment_type = "IN_PLACE"
     deployment_option = "WITHOUT_TRAFFIC_CONTROL"
