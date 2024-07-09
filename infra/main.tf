@@ -2,14 +2,6 @@ provider "aws" {
   region = "us-east-1"
 }
 
-variable "db_username" {
-  type = string
-}
-
-variable "db_password" {
-  type = string
-}
-
 resource "aws_key_pair" "deployer-key" {
   key_name   = "my-existing-key"
   public_key = file("keysaws.pub")
@@ -171,8 +163,8 @@ resource "aws_db_instance" "postgres" {
   engine                  = "postgres"
   engine_version          = "14"
   instance_class          = "db.t3.micro"
-  username                = var.db_username
-  password                = var.db_password
+  username                = "postgres"
+  password                = "postgres"
   db_subnet_group_name    = aws_db_subnet_group.main.id
   vpc_security_group_ids  = [aws_security_group.allow_postgres.id]
   skip_final_snapshot     = true
@@ -208,10 +200,10 @@ resource "null_resource" "db_setup" {
   depends_on = [aws_db_instance.postgres]
 
   provisioner "local-exec" {
-    command = "psql -h ${aws_db_instance.postgres.address} -p 5432 -U ${var.db_username} -d postgres -f init.sql"
+    command = "psql -h ${aws_db_instance.postgres.address} -p 5432 -U postgres -d postgres -f init.sql"
 
     environment = {
-      PGPASSWORD = var.db_password
+      PGPASSWORD = "postgres"
     }
   }
 }
