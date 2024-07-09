@@ -21,7 +21,7 @@ public class AccountController {
 
     @GetMapping("/testdeploy")
     public String testDeploy() {
-        return "Deploy";
+        return "Deploy com terraform";
     }
     @GetMapping("/preferences")
     public ResponseEntity<?> getAccount(@RequestParam("id") Integer id){
